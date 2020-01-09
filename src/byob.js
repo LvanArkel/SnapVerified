@@ -135,6 +135,8 @@ var BlockRemovalDialogMorph;
 
 function CustomBlockDefinition(spec, receiver) {
     this.body = null; // a Context (i.e. a reified top block)
+    this.requires = null;
+    this.ensures = null;
     this.scripts = [];
     this.category = null;
     this.isGlobal = false;
@@ -2113,7 +2115,7 @@ BlockEditorMorph.prototype.init = function (definition, target) {
         comment.block = proto;
     }
     if (definition.body !== null) {
-        proto.nextBlock(isLive ? definition.body.expression
+        proto.nextRingBlock(isLive ? definition.body.expression
                 : definition.body.expression.fullCopy()
         );
     }
@@ -2291,7 +2293,7 @@ BlockEditorMorph.prototype.refreshAllBlockInstances = function (oldSpec) {
 };
 
 BlockEditorMorph.prototype.updateDefinition = function () {
-    var head, ide,
+    var head, ide, context,
         oldSpec = this.definition.blockSpec(),
         pos = this.body.contents.position(),
         element,
@@ -2332,8 +2334,10 @@ BlockEditorMorph.prototype.updateDefinition = function () {
             this.definition.comment = null;
         }
     }
-
-    this.definition.body = this.context(head);
+    context = this.context(head);
+    this.definition.body = context[0];
+    this.definition.requires = context[1];
+    this.definition.ensures = context[2];
     this.refreshAllBlockInstances(oldSpec);
     ide = this.target.parentThatIsA(IDE_Morph);
     ide.flushPaletteCache();
@@ -2343,26 +2347,31 @@ BlockEditorMorph.prototype.updateDefinition = function () {
 BlockEditorMorph.prototype.context = function (prototypeHat) {
     // answer my script reified for deferred execution
     // if no prototypeHat is given, my body is scanned
-    var head, topBlock, stackFrame;
+    var head, topBlock, verify, requiresBlock, ensuresBlock, stackFrame;
 
     head = prototypeHat || detect(
         this.body.contents.children,
         function (c) {return c instanceof PrototypeHatBlockMorph; }
     );
-    topBlock = head.nextBlock();
-    if (topBlock === null) {
-        return null;
+    topBlock = head.nextRingBlock();
+    verify = head.verifyBlocks();
+    requiresBlock = verify[0];
+    ensuresBlock = verify[1];
+    stackFrame = [null,null,null];
+    if (topBlock !== null) {
+        topBlock.allChildren().forEach(function (c) {
+            if (c instanceof BlockMorph) {c.cachedInputs = null; }
+        });
+        stackFrame[0] = Process.prototype.reify.call(
+            null,
+            topBlock,
+            new List(this.definition.inputNames()),
+            true // ignore empty slots for custom block reification
+        );
+        stackFrame[0].outerContext = null;
     }
-    topBlock.allChildren().forEach(function (c) {
-        if (c instanceof BlockMorph) {c.cachedInputs = null; }
-    });
-    stackFrame = Process.prototype.reify.call(
-        null,
-        topBlock,
-        new List(this.definition.inputNames()),
-        true // ignore empty slots for custom block reification
-    );
-    stackFrame.outerContext = null;
+    stackFrame[1] = requiresBlock;
+    stackFrame[2] = ensuresBlock;
     return stackFrame;
 };
 
@@ -2504,6 +2513,12 @@ PrototypeHatBlockMorph.prototype.init = function (definition) {
             vars.addInput(name);
         });
     }
+    this.add(this.labelPart('%br'));
+    this.add(this.labelPart('requires'));
+    this.add(definition.requires ? definition.requires : this.labelPart('%mult%b'));
+    this.add(this.labelPart('%c'));
+    this.add(this.labelPart('ensures'));
+    this.add(definition.ensures ? definition.ensures : this.labelPart('%mult%b'));
     proto.refreshPrototypeSlotTypes(); // show slot type indicators
     this.fixLayout();
     proto.fixBlockColor(this, true);
@@ -2558,7 +2573,7 @@ PrototypeHatBlockMorph.prototype.fixBlockColor = function (
 
 PrototypeHatBlockMorph.prototype.variableNames = function (choice) {
     var parts = this.parts();
-    if (parts.length < 3) {return []; }
+    if (parts.length < 9) {return []; }
     return parts[2].evaluate();
 };
 
@@ -2571,6 +2586,44 @@ PrototypeHatBlockMorph.prototype.enableBlockVars = function (choice) {
     }
     this.replaceInput(this.parts()[0], prot);
     this.spec = null;
+};
+
+//Makes the flat edge on the hat.
+PrototypeHatBlockMorph.prototype.isStop = function() {
+    return true;
+};
+
+PrototypeHatBlockMorph.prototype.nextRingBlock = function (block) {
+    cring = detect(
+        this.children,
+        function (child) {
+            return child instanceof CSlotMorph
+                && !child.isPrototype;
+        }
+    );
+    if (block) {
+        cring.nestedBlock(block);
+    } else {
+        if (cring) {
+            return detect(
+                cring.children,
+                function (child) {
+                    return child instanceof CommandBlockMorph
+                        && !child.isPrototype;
+                }
+            );
+        }
+    }
+};
+
+PrototypeHatBlockMorph.prototype.verifyBlocks = function () {
+    return this.children.filter(
+        function (child) {
+
+            return child instanceof MultiArgMorph
+                && !child.isPrototype;
+        }
+    );
 };
 
 // BlockLabelFragment //////////////////////////////////////////////////

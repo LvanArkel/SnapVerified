@@ -737,7 +737,8 @@ Process.prototype.evaluateContext = function () {
 
 Process.prototype.evaluateBlock = function (block, argCount) {
     var rcvr, inputs,
-    	selector = block.selector;
+    	selector = block.selector,
+        multiArg;
 
     // check for special forms
     if (selector === 'reportOr' ||
@@ -746,6 +747,8 @@ Process.prototype.evaluateBlock = function (block, argCount) {
             selector === 'doReport') {
         return this[selector](block);
     }
+
+
 
     // first evaluate all inputs, then apply the primitive
     rcvr = this.context.receiver || this.receiver;
@@ -760,6 +763,11 @@ Process.prototype.evaluateBlock = function (block, argCount) {
         }
         if (this.isCatchingErrors) {
             try {
+                if (selector.startsWith("doVerify")) {
+                    multiArg = [
+                        block.cachedInputs[0].cachedInputs];
+                    inputs = multiArg.concat(inputs);
+                }
                 this.returnValueToParentContext(
                     rcvr[selector].apply(rcvr, inputs)
                 );
@@ -1390,7 +1398,9 @@ Process.prototype.evaluateCustomBlock = function () {
         exit,
         i,
         value,
-        outer;
+        outer,
+        reqblock,
+        ensblock;
 
     if (!context) {return null; }
     this.procedureCount += 1;
@@ -1478,6 +1488,15 @@ Process.prototype.evaluateCustomBlock = function () {
         }
     }
     runnable.expression = runnable.expression.blockSequence();
+    reqblock = new BlockMorph();
+    reqblock.selector = "doVerifyPre";
+    reqblock.add(method.requires);
+    ensblock = new BlockMorph();
+    ensblock.selector = "doVerifyPost";
+    ensblock.add(method.ensures);
+
+    runnable.expression.unshift(reqblock);
+    runnable.expression.push(ensblock);
 };
 
 // Process variables primitives
@@ -5632,6 +5651,30 @@ Process.prototype.reportAtomicGroup = function (list, reporter) {
         result.push(new List([key, value.length, new List(value)]));
     });
     return new List(result);
+};
+
+Process.prototype.doVerifyPre = function (conditions, elements) {
+    this.doVerify(conditions, elements, "Precondition");
+};
+
+Process.prototype.doVerifyPost = function (elements) {
+    this.doVerify(conditions, elements, "Postcondition");
+}
+
+Process.prototype.doVerify = function (conditions, elements, name) {
+    var list = [], i, j = 1;
+    for (i = 0; i < elements.length(); i++) {
+        let element = elements.contents[i];
+        if (element != null) {
+            if (!element) {
+                list.push(j);
+            }
+            j++;
+        }
+    }
+    if (list.length > 0) {
+        throw new Error(name + (list.length == 1 ? " " : "s ") + list.join(", ") + " violated");
+    }
 };
 
 // Context /////////////////////////////////////////////////////////////
