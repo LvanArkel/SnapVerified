@@ -1034,13 +1034,15 @@ SnapSerializer.prototype.populateCustomBlocks = function (
     // private
     var myself = this;
     element.children.forEach(function (child, index) {
-        var definition, script, scripts;
+        var definition, script, scripts, requires, ensures, veriTemplate;
         if (child.tag !== 'block-definition') {
             return;
         }
         definition = isGlobal ? object.globalBlocks[index]
                 : object.customBlocks[index];
         script = child.childNamed('script');
+        requires = child.childNamed('requires').childNamed('list');
+        ensures = child.childNamed('ensures').childNamed('list');
         if (script) {
             definition.body = new Context(
                 null,
@@ -1054,6 +1056,33 @@ SnapSerializer.prototype.populateCustomBlocks = function (
         if (scripts) {
             definition.scripts = myself.loadScriptsArray(scripts, object);
         }
+        if (requires) {
+            veriTemplate = new MultiArgMorph('%b');
+            requires.children.forEach(function (item) {
+                veriTemplate.addInput();
+                myself.loadInput(
+                    item,
+                    veriTemplate.children[veriTemplate.children.length - 2],
+                    veriTemplate,
+                    object
+                );
+            });
+            definition.requires = veriTemplate;
+        }
+        if (ensures) {
+            veriTemplate = new MultiArgMorph('%b');
+            ensures.children.forEach(function (item) {
+                veriTemplate.addInput();
+                myself.loadInput(
+                    item,
+                    veriTemplate.children[veriTemplate.children.length - 2],
+                    veriTemplate,
+                    object
+                );
+            });
+            definition.ensures = veriTemplate;
+        }
+
 
         delete definition.names;
     });
@@ -1315,7 +1344,6 @@ SnapSerializer.prototype.loadInput = function (model, input, block, object) {
                 object
             );
         });
-        input.fixLayout();
     } else if (model.tag === 'block' || model.tag === 'custom-block') {
         block.silentReplaceInput(input, this.loadBlock(model, true, object));
     } else if (model.tag === 'color') {
@@ -2136,6 +2164,8 @@ CustomBlockDefinition.prototype.toXML = function (serializer) {
             '<code>@</code>' +
             '<translations>@</translations>' +
             '<inputs>%</inputs>%%' +
+            '<requires>%</requires>' +
+            '<ensures>%</ensures>' +
             '</block-definition>',
         this.spec,
         this.type,
@@ -2164,7 +2194,9 @@ CustomBlockDefinition.prototype.toXML = function (serializer) {
         this.body ? serializer.store(this.body.expression) : '',
         this.scripts.length > 0 ?
                     '<scripts>' + encodeScripts(this.scripts) + '</scripts>'
-                        : ''
+                        : '',
+        this.requires ? serializer.store(this.requires) : '',
+        this.ensures ? serializer.store(this.ensures) : ''
     );
 };
 

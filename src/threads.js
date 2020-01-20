@@ -823,13 +823,15 @@ Process.prototype.reportAnd = function (block) {
 };
 
 Process.prototype.doReport = function (block) {
-    var outer = this.context.outerContext;
+    var outer = this.context.outerContext, expression;
+    expression = block.inputs()[0];
     if (this.flashContext()) {return; } // flash the block here, special form
     if (this.isClicked && (block.topBlock() === this.topBlock)) {
         this.isShowingResult = true;
     }
     if (block.partOfCustomCommand) {
         this.doStopCustomBlock();
+        expression = [this.context.ensures, expression];
         this.popContext();
     } else {
         while (this.context && this.context.tag !== 'exit') {
@@ -840,6 +842,9 @@ Process.prototype.doReport = function (block) {
             }
         }
         if (this.context) {
+            if (this.context.ensures) {
+                expression = [this.context.ensures, block.inputs()[0]];
+            }
             if (this.context.expression === 'expectReport') {
                 // pop off inserted top-level exit context
                 this.popContext();
@@ -852,7 +857,7 @@ Process.prototype.doReport = function (block) {
     // in any case evaluate (and ignore)
     // the input, because it could be
     // an HTTP Request for a hardware extension
-    this.pushContext(block.inputs()[0], outer);
+    this.pushContext(expression, outer);
     this.context.isCustomCommand = block.partOfCustomCommand;
 };
 
@@ -1431,6 +1436,13 @@ Process.prototype.evaluateCustomBlock = function () {
     runnable.isCustomBlock = true;
     this.context.parentContext = runnable;
 
+    reqblock = new BlockMorph();
+    reqblock.selector = "doVerifyPre";
+    reqblock.add(method.requires.fullCopy());
+    ensblock = new BlockMorph();
+    ensblock.selector = "doVerifyPost";
+    ensblock.add(method.ensures.fullCopy());
+
     // passing parameters if any were passed
     if (parms.length > 0) {
 
@@ -1465,6 +1477,7 @@ Process.prototype.evaluateCustomBlock = function () {
                 outer,
                 outer.receiver
             );
+            exit.ensures = ensblock;
             exit.tag = 'exit';
             runnable.parentContext = exit;
         }
@@ -1475,7 +1488,7 @@ Process.prototype.evaluateCustomBlock = function () {
         // procedureCount as exitTag, and mark all "report" blocks
         // as being inside a custom command definition
         runnable.expression.tagExitBlocks(this.procedureCount, true);
-
+        runnable.ensures = ensblock;
         // tag the caller with the current procedure count, so
         // "stop this block" blocks can catch it, but only
         // if the caller hasn't been tagged already
@@ -1488,12 +1501,6 @@ Process.prototype.evaluateCustomBlock = function () {
         }
     }
     runnable.expression = runnable.expression.blockSequence();
-    reqblock = new BlockMorph();
-    reqblock.selector = "doVerifyPre";
-    reqblock.add(method.requires);
-    ensblock = new BlockMorph();
-    ensblock.selector = "doVerifyPost";
-    ensblock.add(method.ensures);
 
     runnable.expression.unshift(reqblock);
     runnable.expression.push(ensblock);
@@ -5657,7 +5664,7 @@ Process.prototype.doVerifyPre = function (conditions, elements) {
     this.doVerify(conditions, elements, "Precondition");
 };
 
-Process.prototype.doVerifyPost = function (elements) {
+Process.prototype.doVerifyPost = function (conditions, elements) {
     this.doVerify(conditions, elements, "Postcondition");
 }
 
@@ -5676,6 +5683,36 @@ Process.prototype.doVerify = function (conditions, elements, name) {
         throw new Error(name + (list.length == 1 ? " " : "s ") + list.join(", ") + " violated");
     }
 };
+
+Process.prototype.reportImplies = function (a, b) {
+    return !(a & !b);
+};
+
+Process.prototype.reportLessThanEqual = function (a,b) {
+    var x = +a,
+        y = +b;
+    if (isNaN(x) || isNaN(y)) {
+        x = a;
+        y = b;
+    }
+    return x <= y;
+};
+
+Process.prototype.reportGreaterThanEqual = function (a, b) {
+    var x = +a,
+        y = +b;
+    if (isNaN(x) || isNaN(y)) {
+        x = a;
+        y = b;
+    }
+    return x >= y;
+};
+
+Process.prototype.doAssert = function (bool) {
+    if (bool != null && !bool) {
+        throw new Error ("Assertion violated");
+    }
+}
 
 // Context /////////////////////////////////////////////////////////////
 

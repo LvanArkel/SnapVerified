@@ -144,7 +144,8 @@ SpriteMorph.prototype.categories =
         'pen',
         'variables',
         'lists',
-        'other'
+        'other',
+        'verification'
     ];
 
 SpriteMorph.prototype.blockColor = {
@@ -157,7 +158,8 @@ SpriteMorph.prototype.blockColor = {
     operators : new Color(98, 194, 19),
     variables : new Color(243, 118, 29),
     lists : new Color(217, 77, 17),
-    other: new Color(150, 150, 150)
+    other: new Color(150, 150, 150),
+    verification: new Color(255, 0, 0)
 };
 
 SpriteMorph.prototype.paletteColor = new Color(55, 55, 55);
@@ -1411,6 +1413,28 @@ SpriteMorph.prototype.initBlocks = function () {
             spec: 'video %vid on %self',
             defaults: [['motion'], ['myself']]
         },
+
+        // Verification
+        reportImplies: {
+            type: 'predicate',
+            category: 'verification',
+            spec: '%b implies %b'
+        },
+        reportLessThanEqual: {
+            type: 'predicate',
+            category: 'verification',
+            spec: '%n ≤ %n'
+        },
+        reportGreaterThanEqual: {
+            type: 'predicate',
+            category: 'verification',
+            spec: '%n ≥ %n'
+        },
+        doAssert: {
+            type: 'command',
+            category: 'verification',
+            spec: 'assert %b'
+        }
     };
 };
 
@@ -2647,7 +2671,14 @@ SpriteMorph.prototype.blockTemplates = function (category) {
 
         blocks.push(this.makeBlockButton());
 
- 	}
+ 	} else if (cat === 'verification') {
+        blocks.push(block('reportImplies'));
+        blocks.push(block('reportLessThanEqual'));
+        blocks.push(block('reportGreaterThanEqual'));
+        blocks.push(block('doAssert'));
+
+        blocks.push(this.makeBlockButton());
+    }
     return blocks;
 };
 

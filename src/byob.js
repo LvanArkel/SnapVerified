@@ -2107,7 +2107,7 @@ BlockEditorMorph.prototype.init = function (definition, target) {
     scripts.cachedTexture = IDE_Morph.prototype.scriptsPaneTexture;
     scripts.cleanUpMargin = 10;
 
-    proto = new PrototypeHatBlockMorph(this.definition);
+    proto = new PrototypeHatBlockMorph(this.definition, isLive);
     proto.setPosition(scripts.position().add(10));
     if (definition.comment !== null) {
         comment = definition.comment.fullCopy();
@@ -2486,13 +2486,13 @@ PrototypeHatBlockMorph.uber = HatBlockMorph.prototype;
 
 // PrototypeHatBlockMorph instance creation:
 
-function PrototypeHatBlockMorph(definition) {
+function PrototypeHatBlockMorph(definition, isLive) {
     this.init(definition);
 }
 
-PrototypeHatBlockMorph.prototype.init = function (definition) {
+PrototypeHatBlockMorph.prototype.init = function (definition, isLive) {
     var proto = definition.prototypeInstance(),
-        vars;
+        vars, req, ens;
 
     this.definition = definition;
 
@@ -2513,12 +2513,18 @@ PrototypeHatBlockMorph.prototype.init = function (definition) {
             vars.addInput(name);
         });
     }
+    if (definition.requires) {
+        req = isLive ? definition.requires : definition.requires.fullCopy();
+    }
+    if (definition.ensures) {
+        ens = isLive ? definition.ensures : definition.ensures.fullCopy();
+    }
     this.add(this.labelPart('%br'));
     this.add(this.labelPart('requires'));
-    this.add(definition.requires ? definition.requires : this.labelPart('%mult%b'));
+    this.add(definition.requires ? req : this.labelPart('%mult%b'));
     this.add(this.labelPart('%c'));
     this.add(this.labelPart('ensures'));
-    this.add(definition.ensures ? definition.ensures : this.labelPart('%mult%b'));
+    this.add(definition.ensures ? ens : this.labelPart('%mult%b'));
     proto.refreshPrototypeSlotTypes(); // show slot type indicators
     this.fixLayout();
     proto.fixBlockColor(this, true);
